@@ -1,25 +1,47 @@
 spring:
+  profiles:
+    active: dev
   application:
     name: user-center
   # DataSourece Config
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/usercenter
+    url: jdbc:mysql://localhost:3306/xiban
     username: root
     password: 123456789
   # session失效时间
   session:
     timeout: 86400
+    store-type: redis
+  mvc:
+    pathmatch:
+      matching-strategy: Ant_Path_Matcher
+  # redis配置
+  redis:
+    port: 6379
+    host: localhost
+    database: 0
+  # 解决前端传输时间默认＋8小时问题
+  jackson:
+    time-zone: GMT+8  #后端与数据库交互时，时间没有问题，问题在前端和后端之间时间数据传输时通过fastjson,转换，fastjson默认时区是中国上海时区-8小时，所以导致时区转换差了8小时，配置文件通过添加配置，告诉java，字符串时间为GMT+8，使时区一致。
+
 
 server:
   port: 8080
   servlet:
     context-path: /api
+    session:
+      cookie:
+        domain: localhost
+        same-site: none
+        secure: true
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
       logic-delete-field: isDelete # 全局逻辑删除的实体字段名（since3.3.0,配置后可以忽略不再配置步骤2）
       logic-delete-value: 1 # 逻辑已删除值（默认为1）
       logic-not-delete-value: 0 # 逻辑未删除值（默认为0）
+
