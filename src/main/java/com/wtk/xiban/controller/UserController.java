@@ -10,6 +10,7 @@ import com.wtk.xiban.exception.BusinessException;
 import com.wtk.xiban.model.domain.User;
 import com.wtk.xiban.model.request.UserLoginRequest;
 import com.wtk.xiban.model.request.UserRegisterRequest;
+import com.wtk.xiban.model.vo.UserVO;
 import com.wtk.xiban.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -118,7 +119,7 @@ public class UserController {
         List<User> userList = userService.searchUsersByTags(tagNameList);
         return ResultUtils.success(userList);
     }
-
+    // todo 推荐多个，未实现
     @GetMapping("/recommend")
     public BaseResponse<Page<User>> recommendUsers(long pageSize, long pageNum,HttpServletRequest request){
         User loginUser = userService.getLoginUser(request);
@@ -170,6 +171,20 @@ public class UserController {
 
     }
 
+    /**
+     * 获取最匹配的用户
+     * @param num
+     * @param request
+     * @return
+     */
+    @GetMapping("/match")
+    public BaseResponse<List<User>> matchUsers(long num, HttpServletRequest request){
+        if (num <= 0 || num > 20){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        return ResultUtils.success(userService.matchUsers(num, loginUser));
+    }
 
 
 

@@ -7,8 +7,12 @@ import com.google.gson.reflect.TypeToken;
 import com.wtk.xiban.common.ErrorCode;
 import com.wtk.xiban.exception.BusinessException;
 import com.wtk.xiban.model.domain.User;
+import com.wtk.xiban.model.vo.UserVO;
 import com.wtk.xiban.service.UserService;
 import com.wtk.xiban.mapper.UserMapper;
+import com.wtk.xiban.utils.AlgorithmUtils;
+import javafx.util.Pair;
+import jdk.nashorn.internal.parser.TokenType;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
@@ -17,10 +21,7 @@ import org.springframework.util.DigestUtils;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -46,10 +47,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private static final String SALT = "wtk";
 
 
-
+    /**
+     * 用户注册功能
+     * @param userAccount   用户账号
+     * @param userPassword  用户密码
+     * @param checkPassword 校验密码
+     * @param planetCode
+     * @return
+     */
     @Override
     public long userRegister(String userAccount, String userPassword, String checkPassword,String planetCode) {
-
         // 1.校验
         if (StringUtils.isAnyBlank(userAccount, userPassword, checkPassword, planetCode)){
             throw new BusinessException(ErrorCode.PARAMS_ERROR,"参数为空");
@@ -101,6 +108,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return user.getId();
     }
 
+    /**
+     * 用户登录功能
+     * @param userAccount  用户账户
+     * @param userPassword 用户密码
+     * @param request
+     * @return
+     */
     @Override
     public User userLogin(String userAccount, String userPassword, HttpServletRequest request) {
         // 1.校验
@@ -212,6 +226,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }).map(this::getSafetyUser).collect(Collectors.toList());
     }
 
+    /**
+     * 修改用户信息
+     * @param user
+     * @param loginUser
+     * @return
+     */
     @Override
     public int updateUser(User user, User loginUser) {
         long userId = user.getId();
@@ -231,6 +251,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return userMapper.updateById(user);
     }
 
+    /**
+     * 获取当前登陆用户
+     * @param request
+     * @return
+     */
     @Override
     public User getLoginUser(HttpServletRequest request) {
         if (request == null){
@@ -263,6 +288,58 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public boolean isAdmin(User loginUser) {
         return loginUser != null && loginUser.getUserRole() == ADMIN_ROLE;
+    }
+
+    /**
+     * 匹配用户
+     * @param num
+     * @param loginUser
+     * @return
+     */
+    @Override
+    public List<User> matchUsers(long num, User loginUser) {
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        queryWrapper.select("id","tags");
+        queryWrapper.isNotNull("tags");
+        List<User> userList = this.list(queryWrapper);
+        String tags = loginUser.getTags();
+        Gson gson = new Gson();
+        List<String> tagList = gson.fromJson(tags, new TypeToken<List<String>>() {
+        }.getType());
+        // 设置一个list列表，存<user,distance> 用户 => 相似度
+        List<Pair<User, Long>> list = new ArrayList<>();
+        for (int i = 0; i < userList.size(); i++) {
+            User user = userList.get(i);
+            String userTags = user.getTags();
+            if (StringUtils.isBlank(userTags) || user.getId() == loginUser.getId()){
+                continue;
+            }
+            List<String> userTagList = gson.fromJson(userTags, new TypeToken<List<String>>(){}.getType());
+            long distance = AlgorithmUtils.minDistance(tagList, userTagList);
+            list.add(new Pair<>(user, distance));
+        }
+        // 按编辑距离从小到大
+        List<Pair<User, Long>> topUserPairList = list.stream()
+                .sorted((a, b) -> (int)(a.getValue() - b.getValue()))
+                .limit(num)
+                .collect(Collectors.toList());
+        List<Long> userIdList = topUserPairList.stream().map(pair -> pair.getKey().getId()).collect(Collectors.toList());
+        QueryWrapper<User> userQueryWrapper = new QueryWrapper<>();
+        userQueryWrapper.in("id",userIdList);
+        /*
+            1,3,2
+            User1,User2,User3
+            1=>User1, 2=>User2, 3=>User3
+         */
+        Map<Long, List<User>> userIdUserListMap = this.list(userQueryWrapper)
+                .stream()
+                .map(user -> getSafetyUser(user))
+                .collect(Collectors.groupingBy(User::getId));
+        List<User> finalUserList = new ArrayList<>();
+        for (Long userId : userIdList){
+            finalUserList.add(userIdUserListMap.get(userId).get(0));
+        }
+        return finalUserList;
     }
 
 
